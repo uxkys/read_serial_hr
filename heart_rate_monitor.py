@@ -21,14 +21,20 @@ def compute_heart_rate_variability(r_peaks, fs=200):
     else:
         return np.nan, np.nan, np.nan
 
+def moving_average(data, n=5):
+    return np.convolve(data, np.ones(n)/n, mode='valid')
+
 serial_port = '/dev/tty.usbmodem11301'
 baud_rate = 115200
 ser = serial.Serial(serial_port, baud_rate)
 
 output_file = open("hrv_data.csv", "w")
-output_file.write("Timestamp,RMSSD,SDNN,SDNN_RMSSD\n")
+output_file.write("Timestamp,RMSSD,SDNN,SDNN_RMSSD,Short_MA,Long_MA,MA_Difference\n")
 
 data = []
+rmssd_values = []
+sdnn_values = []
+
 try:
     while True:
         line = ser.readline()
@@ -42,12 +48,19 @@ try:
             filtered_data = apply_bandpass_filter(np.array(data))
             r_peaks, _ = find_peaks(filtered_data, height=np.max(filtered_data)*0.5)
             rmssd, sdnn, sdnn_rmssd_ratio = compute_heart_rate_variability(r_peaks)
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-            # Format output for consistency and rounding
-            output_line = f"{timestamp},{format(rmssd, '.3f')},{format(sdnn, '.3f')},{format(sdnn_rmssd_ratio, '.3f')}\n"
-            output_file.write(output_line)
-            print(f"RMSSD: {format(rmssd, '.3f')} SDNN: {format(sdnn, '.3f')} SDNN/RMSSD: {format(sdnn_rmssd_ratio, '.3f')}")
-            data = []
+            rmssd_values.append(rmssd)
+            sdnn_values.append(sdnn)
+
+            if len(rmssd_values) >= 20:
+                short_ma_rmssd = moving_average(rmssd_values[-20:], 5)[-1]
+                long_ma_rmssd = moving_average(rmssd_values, 20)[-1]
+                ma_difference_rmssd = short_ma_rmssd - long_ma_rmssd
+
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                output_line = f"{timestamp},{rmssd},{sdnn},{sdnn_rmssd_ratio},{short_ma_rmssd},{long_ma_rmssd},{ma_difference_rmssd}\n"
+                output_file.write(output_line)
+                print(f"RMSSD: {rmssd}, SDNN: {sdnn}, SDNN/RMSSD: {sdnn_rmssd_ratio}, Short MA: {short_ma_rmssd}, Long MA: {long_ma_rmssd}, MA Difference: {ma_difference_rmssd}")
+                data = []  # Reset data buffer for next segment
 
 except KeyboardInterrupt:
     output_file.close()
