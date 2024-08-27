@@ -48,19 +48,26 @@ try:
             filtered_data = apply_bandpass_filter(np.array(data))
             r_peaks, _ = find_peaks(filtered_data, height=np.max(filtered_data)*0.5)
             rmssd, sdnn, sdnn_rmssd_ratio = compute_heart_rate_variability(r_peaks)
-            rmssd_values.append(rmssd)
-            sdnn_values.append(sdnn)
+
+            if not np.isnan(rmssd):
+                rmssd_values.append(rmssd)
+            if not np.isnan(sdnn):
+                sdnn_values.append(sdnn)
 
             if len(rmssd_values) >= 20:
-                short_ma_rmssd = moving_average(rmssd_values[-20:], 5)[-1]
-                long_ma_rmssd = moving_average(rmssd_values, 20)[-1]
-                ma_difference_rmssd = short_ma_rmssd - long_ma_rmssd
+                valid_rmssd_values = [v for v in rmssd_values[-20:] if not np.isnan(v)]
+                valid_long_rmssd_values = [v for v in rmssd_values if not np.isnan(v)]
+
+                short_ma_rmssd = moving_average(valid_rmssd_values, 5)[-1] if len(valid_rmssd_values) >= 5 else np.nan
+                long_ma_rmssd = moving_average(valid_long_rmssd_values, 20)[-1] if len(valid_long_rmssd_values) >= 20 else np.nan
+                ma_difference_rmssd = short_ma_rmssd - long_ma_rmssd if not np.isnan(short_ma_rmssd) and not np.isnan(long_ma_rmssd) else np.nan
 
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
                 output_line = f"{timestamp},{rmssd},{sdnn},{sdnn_rmssd_ratio},{short_ma_rmssd},{long_ma_rmssd},{ma_difference_rmssd}\n"
                 output_file.write(output_line)
                 print(f"RMSSD: {rmssd}, SDNN: {sdnn}, SDNN/RMSSD: {sdnn_rmssd_ratio}, Short MA: {short_ma_rmssd}, Long MA: {long_ma_rmssd}, MA Difference: {ma_difference_rmssd}")
-                data = []  # Reset data buffer for next segment
+                
+            data = []  # Reset data buffer for next segment
 
 except KeyboardInterrupt:
     output_file.close()
