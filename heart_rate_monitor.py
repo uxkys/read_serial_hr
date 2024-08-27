@@ -31,6 +31,8 @@ def compute_heart_rate_variability(r_peaks, fs=200):
 
 # 移動平均を計算する関数
 def moving_average(data, n=5):
+    if len(data) < n:
+        return np.array([np.nan])  # データが不足している場合はNaNを返す
     return np.convolve(data, np.ones(n)/n, mode='valid')  # 移動平均を計算
 
 serial_port = '/dev/tty.usbmodem11301'  # 使用するシリアルポートを指定
@@ -98,6 +100,8 @@ try:
                     f"{cumulative_avg_sdnn_rmssd:.3f},{ma_difference_sdnn_rmssd:.3f},{cumulative_avg_long_ma_difference:.3f},{cumulative_avg_short_ma_difference:.3f}\n"
                 )
                 output_file.write(output_line)  # データをファイルに書き込む
+                
+                # 出力を指定されたフォーマットで表示
                 print(
                     f"RMSSD: {rmssd:.3f}, SDNN: {sdnn:.3f}, SDNN/RMSSD: {sdnn_rmssd_ratio:.3f}, SMAS/R: {short_ma_sdnn_rmssd:.3f}, "
                     f"LMAS/R: {long_ma_sdnn_rmssd:.3f}, AllAvgS/R: {cumulative_avg_sdnn_rmssd:.3f}, "
