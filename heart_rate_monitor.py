@@ -3,6 +3,12 @@ import numpy as np  # 数値計算のためのライブラリをインポート
 from scipy.signal import butter, filtfilt, find_peaks  # 信号処理に必要な関数をインポート
 import time  # 時間に関連する関数を扱うためのライブラリをインポート
 
+# ▼ターミナルコマンド▼
+# cd Box\ Sync/書類/github/read-serial
+# python3 heart_rate_monitor.py
+# ctrl + C と入力するとpythonから抜けられます
+# ▲ターミナルコマンド▲
+
 # バンドパスフィルタを適用する関数
 def apply_bandpass_filter(data, lowcut=0.5, highcut=30, fs=200, order=5):
     nyq = 0.5 * fs  # ナイキスト周波数を計算
@@ -88,15 +94,15 @@ try:
 
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S")  # 現在のタイムスタンプを取得
                 output_line = (
-                    f"{timestamp},{rmssd},{sdnn},{sdnn_rmssd_ratio},{short_ma_sdnn_rmssd},{long_ma_sdnn_rmssd},"
-                    f"{cumulative_avg_sdnn_rmssd},{ma_difference_sdnn_rmssd},{cumulative_avg_long_ma_difference},{cumulative_avg_short_ma_difference}\n"
+                    f"{timestamp},{rmssd:.3f},{sdnn:.3f},{sdnn_rmssd_ratio:.3f},{short_ma_sdnn_rmssd:.3f},{long_ma_sdnn_rmssd:.3f},"
+                    f"{cumulative_avg_sdnn_rmssd:.3f},{ma_difference_sdnn_rmssd:.3f},{cumulative_avg_long_ma_difference:.3f},{cumulative_avg_short_ma_difference:.3f}\n"
                 )
                 output_file.write(output_line)  # データをファイルに書き込む
                 print(
-                    f"RMSSD: {rmssd}, SDNN: {sdnn}, SDNN/RMSSD: {sdnn_rmssd_ratio}, Short MA: {short_ma_sdnn_rmssd}, "
-                    f"Long MA: {long_ma_sdnn_rmssd}, Cumulative Avg SDNN/RMSSD: {cumulative_avg_sdnn_rmssd}, "
-                    f"MA Difference: {ma_difference_sdnn_rmssd}, Cumulative Avg - Long MA Difference: {cumulative_avg_long_ma_difference}, "
-                    f"Cumulative Avg - Short MA Difference: {cumulative_avg_short_ma_difference}"
+                    f"RMSSD: {rmssd:.3f}, SDNN: {sdnn:.3f}, SDNN/RMSSD: {sdnn_rmssd_ratio:.3f}, Short MA: {short_ma_sdnn_rmssd:.3f}, "
+                    f"Long MA: {long_ma_sdnn_rmssd:.3f}, Cumulative Avg SDNN/RMSSD: {cumulative_avg_sdnn_rmssd:.3f}, "
+                    f"MA Difference: {ma_difference_sdnn_rmssd:.3f}, Cumulative Avg - Long MA Difference: {cumulative_avg_long_ma_difference:.3f}, "
+                    f"Cumulative Avg - Short MA Difference: {cumulative_avg_short_ma_difference:.3f}"
                 )
                 
             data = []  # データバッファをリセットして次のセグメントを処理
