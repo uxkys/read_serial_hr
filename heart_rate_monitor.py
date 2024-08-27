@@ -99,10 +99,10 @@ try:
                 )
                 output_file.write(output_line)  # データをファイルに書き込む
                 print(
-                    f"RMSSD: {rmssd:.3f}, SDNN: {sdnn:.3f}, SDNN/RMSSD: {sdnn_rmssd_ratio:.3f}, Short MA: {short_ma_sdnn_rmssd:.3f}, "
-                    f"Long MA: {long_ma_sdnn_rmssd:.3f}, Cumulative Avg SDNN/RMSSD: {cumulative_avg_sdnn_rmssd:.3f}, "
-                    f"MA Difference: {ma_difference_sdnn_rmssd:.3f}, Cumulative Avg - Long MA Difference: {cumulative_avg_long_ma_difference:.3f}, "
-                    f"Cumulative Avg - Short MA Difference: {cumulative_avg_short_ma_difference:.3f}"
+                    f"RMSSD: {rmssd:.3f}, SDNN: {sdnn:.3f}, SDNN/RMSSD: {sdnn_rmssd_ratio:.3f}, SMAS/R: {short_ma_sdnn_rmssd:.3f}, "
+                    f"LMAS/R: {long_ma_sdnn_rmssd:.3f}, AllAvgS/R: {cumulative_avg_sdnn_rmssd:.3f}, "
+                    f"S-L: {ma_difference_sdnn_rmssd:.3f}, All-L: {cumulative_avg_long_ma_difference:.3f}, "
+                    f"All-S: {cumulative_avg_short_ma_difference:.3f}"
                 )
                 
             data = []  # データバッファをリセットして次のセグメントを処理
