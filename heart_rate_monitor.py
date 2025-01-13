@@ -12,83 +12,129 @@ from scipy.signal import butter, filtfilt, find_peaks
 
 # バンドパスフィルタを適用する関数
 def apply_bandpass_filter(data, lowcut=0.5, highcut=30, fs=200, order=5):
-    nyq = 0.5 * fs  # ナイキスト周波数を計算
-    low = lowcut / nyq  # 低周波数の正規化
-    high = highcut / nyq  # 高周波数の正規化
-    b, a = butter(order, [low, high], btype='band')  # バンドパスフィルタの係数を計算
-    y = filtfilt(b, a, data)  # フィルタをデータに適用
+    nyq = 0.5 * fs  # ナイキスト周波数
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype='band')
+    y = filtfilt(b, a, data)
     return y
 
+# A(SDNN/RMSSD)から覚醒度(0-100)を計算する関数
+# ベースライン平均(meanA)±標準偏差(stdA)を閾値とし、
+# (meanA - stdA)→0, (meanA + stdA)→100 の範囲に線形マッピングする例
+def compute_arousal_value(a_current, meanA, stdA):
+    lower_bound = meanA - stdA  # 下限
+    upper_bound = meanA + stdA  # 上限
+
+    if upper_bound - lower_bound == 0:
+        return 50.0  # 分母0対策
+
+    arousal = (a_current - lower_bound) / (upper_bound - lower_bound) * 100.0
+    arousal = max(0.0, min(100.0, arousal))  # 0-100にクリップ
+    return arousal
+
 # シリアル通信の設定
-serial_port = '/dev/tty.usbmodem1101'  # 適切なポートを指定（環境に合わせて変更）
-baud_rate = 115200  # 通信速度を設定
+serial_port = '/dev/tty.usbmodem1101'
+baud_rate = 115200
 ser = serial.Serial(serial_port, baud_rate)
 
-data = []  # 受信データを格納するリスト
+# パラメータの初期設定
+data = []
 fs = 200  # サンプリング周波数（Hz）
 
-# 保存用のリスト
 all_hr = []
 all_rmssd = []
 all_sdnn_rmssd = []
-a_values = []
+a_values = []  # A(SDNN/RMSSD) の履歴
 
-# CSVファイルを開く
-with open('hr_data.csv', mode='w', newline='') as file:
+csv_filename = 'hr_data.csv'
+
+# ベースライン計測用の変数
+baseline_values = []
+measure_baseline = True
+baseline_duration_sec = 300  # ★ ここを 5分(300秒)に変更 ★
+baseline_start_time = time.time()
+
+meanA_baseline = None
+stdA_baseline = None
+
+with open(csv_filename, mode='w', newline='') as file:
     writer = csv.writer(file)
-    writer.writerow(['Timestamp', 'RRI (ms)', 'HR (bpm)'])  # ヘッダーを書き込む
+    writer.writerow(['Timestamp', 'RRI (ms)', 'HR (bpm)', 'Arousal(0-100)'])
 
     try:
         while True:
-            line = ser.readline()  # シリアルポートから1行のデータを読み込む
+            line = ser.readline()
             try:
-                value = int(line.decode().strip())  # データを整数に変換
-                data.append(value)  # データをリストに追加
+                value = int(line.decode().strip())
+                data.append(value)
             except ValueError:
-                continue  # 整数に変換できない場合は無視して次に進む
+                continue
 
-            if len(data) >= fs * 10:  # データが10秒分以上蓄積されたら
-                filtered_data = apply_bandpass_filter(np.array(data), lowcut=0.5, highcut=30, fs=fs)  # フィルタを適用
-                r_peaks, _ = find_peaks(filtered_data, height=np.max(filtered_data) * 0.5, distance=fs * 0.6)  # Rピークを検出
+            # 10秒たまるごとに解析
+            if len(data) >= fs * 10:
+                filtered_data = apply_bandpass_filter(
+                    np.array(data), lowcut=0.5, highcut=30, fs=fs
+                )
+                r_peaks, _ = find_peaks(
+                    filtered_data,
+                    height=np.max(filtered_data) * 0.5,
+                    distance=fs * 0.6
+                )
 
-                # RRIを計算（ms単位）
-                rri = np.diff(r_peaks) / fs * 1000  # RRIを計算
-                valid_rri = rri[(rri > 300) & (rri < 2000)]  # 有効なRRIのみを使用
+                rri = np.diff(r_peaks) / fs * 1000
+                valid_rri = rri[(rri > 300) & (rri < 2000)]
 
                 if len(valid_rri) > 1:
-                    hr = 60000 / np.mean(valid_rri)  # 平均HRを計算
-                    rmssd = np.sqrt(np.mean(np.diff(valid_rri) ** 2))  # RMSSDを計算
-                    sdnn = np.std(valid_rri)  # SDNNを計算
-                    sdnn_rmssd = sdnn / rmssd if rmssd != 0 else 0  # SDNN/RMSSDを計算
+                    hr = 60000.0 / np.mean(valid_rri)
+                    rmssd = np.sqrt(np.mean(np.diff(valid_rri) ** 2))
+                    sdnn = np.std(valid_rri)
+                    sdnn_rmssd = sdnn / rmssd if rmssd != 0 else 0
 
-                    # 各値をリストに追加
+                    a_values.append(sdnn_rmssd)
                     all_hr.append(hr)
                     all_rmssd.append(rmssd)
                     all_sdnn_rmssd.append(sdnn_rmssd)
-                    a_values.append(sdnn_rmssd)
 
-                    # 最新の10秒間のA値を計算
-                    a_last = sdnn_rmssd
-                    # 直近5件のAの平均を計算
-                    b_last = np.mean(a_values[-5:])
-                    # 直近20件のAの平均を計算
-                    c_last = np.mean(a_values[-20:])
-                    # これまでの全SDNN/RMSSDの平均を計算
-                    overall_mean_sdnn_rmssd = np.mean(all_sdnn_rmssd)
+                    # ベースライン計測(5分間)
+                    if measure_baseline:
+                        baseline_values.append(sdnn_rmssd)
+                        elapsed_time = time.time() - baseline_start_time
+                        if elapsed_time >= baseline_duration_sec:
+                            meanA_baseline = np.mean(baseline_values)
+                            stdA_baseline = np.std(baseline_values)
+                            measure_baseline = False
+                            print("=== Baseline measurement finished ===")
+                            print(f"Baseline meanA={meanA_baseline:.3f}, stdA={stdA_baseline:.3f}")
 
-                    # 出力（改行せずに1行で出力）
+                    # ベースライン確定後
+                    if (meanA_baseline is not None) and (stdA_baseline is not None):
+                        current_arousal = compute_arousal_value(
+                            sdnn_rmssd, meanA_baseline, stdA_baseline
+                        )
+                    else:
+                        current_arousal = 50.0
+
                     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                    print(f"Ts, {timestamp}, Mean_HR, {np.mean(all_hr):.2f}, Mean_10s_HR, {hr:.2f}, Mean_10s_RRI, {np.mean(valid_rri):.3f}, "
-                          f"Mean_10s_RMSSD, {rmssd:.3f}, A(SDNN/RMSSD), {a_last:.3f}, B(5_Avg_A), {b_last:.3f}, C(20_Avg_A), {c_last:.3f}, "
-                          f"Overall_Mean_SDNN/RMSSD, {overall_mean_sdnn_rmssd:.3f}, A-Overall_Mean, {a_last - overall_mean_sdnn_rmssd:.3f}, "
-                          f"A/Overall_Mean, {a_last / overall_mean_sdnn_rmssd:.3f}, B/Overall_Mean, {b_last / overall_mean_sdnn_rmssd:.3f}, "
-                          f"C/Overall_Mean, {c_last / overall_mean_sdnn_rmssd:.3f}")
+                    print(
+                        f"Ts, {timestamp}, "
+                        f"Mean_HR, {np.mean(all_hr):.2f}, "
+                        f"Mean_10s_HR, {hr:.2f}, "
+                        f"Mean_10s_RRI, {np.mean(valid_rri):.3f}, "
+                        f"Mean_10s_RMSSD, {rmssd:.3f}, "
+                        f"A(SDNN/RMSSD), {sdnn_rmssd:.3f}, "
+                        f"Arousal(0-100), {current_arousal:.1f}"
+                    )
 
-                    # CSVに書き込み
-                    writer.writerow([timestamp, f"{np.mean(valid_rri):.3f}", f"{np.mean(all_hr):.2f}"])
+                    writer.writerow([
+                        timestamp,
+                        f"{np.mean(valid_rri):.3f}",
+                        f"{np.mean(all_hr):.2f}",
+                        f"{current_arousal:.2f}"
+                    ])
 
-                # データバッファをリセットして次のセグメントを処理
                 data = []
 
     except KeyboardInterrupt:
-        ser.close()  # シリアル通信を終了
+        ser.close()
+        print("Serial port closed. End.")
